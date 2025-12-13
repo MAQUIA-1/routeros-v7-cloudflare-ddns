@@ -1,6 +1,6 @@
-# Cloudflare DDNS for MikroTik RouterOS
+# Cloudflare DDNS for MikroTik RouterOS v7
 
-Automatically updates Cloudflare DNS A records when your WAN IP address changes.
+Monitors a specific network interface and automatically updates Cloudflare DNS A records when the interface IP address changes.
 
 ## Requirements
 
