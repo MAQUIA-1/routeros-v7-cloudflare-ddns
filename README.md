@@ -11,6 +11,10 @@ Monitors a specific network interface and automatically updates Cloudflare DNS A
 **MikroTik Script Permissions:**
 - `read`, `write`, `policy`, `test`
 
+**Device-mode Policies:**
+This script requires `fetch` and `scheduler` to be allowed in Device-mode. If these policies are restricted, the script may fail to execute.
+- Refer to [MikroTik Device-mode documentation](https://help.mikrotik.com/docs/spaces/ROS/pages/93749258/Device-mode) for configuration.
+
 ## Configuration
 
 Edit `cloudflare-ddns.rsc` before use:
