@@ -5,8 +5,8 @@ Monitors a specific network interface and automatically updates Cloudflare DNS A
 ## Requirements
 
 **Cloudflare API Token:**
+- Zone - DNS - Read
 - Zone - DNS - Edit
-- Zone - Zone - Read
 
 **MikroTik Script Permissions:**
 - `read`, `write`, `policy`, `test`
