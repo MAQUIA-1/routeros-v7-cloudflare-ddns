@@ -12,22 +12,22 @@ Monitors a specific network interface and automatically updates Cloudflare DNS A
 - `read`, `write`, `policy`, `test`
 
 **Device-mode Policies:**
-This script requires `fetch` and `scheduler` to be allowed in Device-mode. If these policies are restricted, the script may fail to execute.
-- Refer to [MikroTik Device-mode documentation](https://help.mikrotik.com/docs/spaces/ROS/pages/93749258/Device-mode) for configuration.
+- `fetch` and `scheduler` must be allowed in Device-mode
+- See [MikroTik Device-mode documentation](https://help.mikrotik.com/docs/spaces/ROS/pages/93749258/Device-mode) for configuration
 
 ## Configuration
 
-Edit `cloudflare-ddns.rsc` before use:
+Edit `cloudflare-ddns.rsc` with your settings:
 
 ### WAN Interface
 ```routeros
 :local WanInterface "ether1"
 ```
-Change to your actual WAN interface name.
+Set your actual WAN interface name.
 
 ### Domain and Credentials
 ```routeros
-:local ParamVect {
+:local DomainConfigs {
     "example.domain.com"={
         "DnsZoneID"="your_cloudflare_zone_id";
         "AuthToken"="your_cloudflare_api_token";
@@ -35,14 +35,14 @@ Change to your actual WAN interface name.
 }
 ```
 
-Replace:
-- `example.domain.com` - Your domain name
+Replace with your actual values:
+- `example.domain.com` - Domain name
 - `your_cloudflare_zone_id` - Cloudflare Zone ID
 - `your_cloudflare_api_token` - Cloudflare API Token
 
-For multiple domains:
+Multiple domains example:
 ```routeros
-:local ParamVect {
+:local DomainConfigs {
     "domain1.com"={
         "DnsZoneID"="zone_id_1";
         "AuthToken"="api_token_1";
@@ -56,9 +56,14 @@ For multiple domains:
 
 ### Optional Settings
 ```routeros
-:local CloudflareProxy false  # Enable Cloudflare proxy (orange cloud)
-:local TestMode false          # Test mode (no actual updates)
+:local CloudflareProxy false  # Cloudflare proxy (orange cloud)
+:local CheckCertificate false # SSL certificate verification
+:local TestMode false         # Test mode (no actual updates)
 ```
+
+- **CloudflareProxy**: Cloudflare proxy (orange cloud) for DNS records
+- **CheckCertificate**: SSL certificate validation for API connections (requires valid CA certificates)
+- **TestMode**: Test mode (IP checks only, no DNS updates)
 
 ## Installation
 
