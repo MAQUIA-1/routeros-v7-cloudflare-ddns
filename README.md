@@ -56,9 +56,9 @@ Multiple domains example:
 
 ### Optional Settings
 ```routeros
-:local CloudflareProxy false  # Cloudflare proxy (orange cloud)
-:local CheckCertificate false # SSL certificate verification
-:local TestMode false         # Test mode (no actual updates)
+:local CloudflareProxy false
+:local CheckCertificate false
+:local TestMode false
 ```
 
 - **CloudflareProxy**: Cloudflare proxy (orange cloud) for DNS records
