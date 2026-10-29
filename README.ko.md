@@ -1,6 +1,8 @@
 # MikroTik RouterOS v7용 Cloudflare DDNS
 
-네트워크 인터페이스의 IPv4 주소를 확인하고, 주소가 변경되면 설정된 Cloudflare DNS A 레코드를 갱신합니다.
+[English](README.md) | **한국어**
+
+네트워크 인터페이스의 **IPv4 주소**를 확인하고, 주소가 변경되면 설정된 Cloudflare DNS **A 레코드**를 갱신합니다.
 
 ## 요구사항
 

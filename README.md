@@ -1,6 +1,8 @@
 # Cloudflare DDNS for MikroTik RouterOS v7
 
-Monitors a network interface's IPv4 address and updates the configured Cloudflare DNS A records when the address changes.
+**English** | [한국어](README.ko.md)
+
+Monitors a network interface's **IPv4 address** and updates the configured Cloudflare DNS **A records** when the address changes.
 
 ## Requirements
 
