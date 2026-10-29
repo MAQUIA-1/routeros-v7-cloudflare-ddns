@@ -86,6 +86,9 @@ These commands assume the script has already been saved as `cloudflare-ddns` in 
 
 ## Changes — 2026-10-29
 
-- Rebuild the updater around API request, domain update, and main-flow functions; remove runtime syntax probing and duplicate error logs.
-- Preserve retries after partial failure or WAN reversion, TestMode behavior, valid-address filtering, and overlapping-run protection.
-- Verify execution with `read,test` permissions on RouterOS 7.25 CHR using a local mock API. See [execution checks](tests/README.md); live Cloudflare and TLS validation remain untested.
+- Fixed failed DNS updates not being retried while the WAN IP remains unchanged, including recovery when it returns to a previous address.
+- Fixed TestMode causing the next normal run to skip DNS updates.
+- Added protection against overlapping update runs.
+- Excluded disabled and invalid interface addresses from WAN IP selection.
+- Improved failure messages with HTTP status codes and removed duplicate error logs.
+- Simplified permissions: Cloudflare DNS Edit covers both lookup and updates; script and scheduler permissions are now `read,test`.
