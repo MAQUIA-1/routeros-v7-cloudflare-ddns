@@ -2,7 +2,7 @@
 
 **English** | [한국어](README.ko.md)
 
-Monitors a network interface's **IPv4 address** and updates the configured Cloudflare DNS **A records** when the address changes.
+Automatically updates Cloudflare DNS **A records** when the configured interface's **IPv4 address** changes, without using an external IP lookup service.
 
 ## Requirements
 
