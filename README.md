@@ -5,15 +5,19 @@ Monitors a specific network interface and automatically updates Cloudflare DNS A
 ## Requirements
 
 **Cloudflare API Token:**
-- Zone - DNS - Read
+
 - Zone - DNS - Edit
+- Access to the configured zones and existing A records
 
 **MikroTik Script Permissions:**
-- `read`, `write`, `policy`, `test`
+
+- `read`, `test`
+- Set the scheduler policy to match (see Installation).
 
 **Device-mode Policies:**
-- `fetch` and `scheduler` must be allowed in Device-mode
-- See [MikroTik Device-mode documentation](https://help.mikrotik.com/docs/spaces/ROS/pages/93749258/Device-mode) for configuration
+
+- `fetch` and `scheduler` must be allowed for scheduled execution
+- See [MikroTik Device-mode documentation](https://manual.mikrotik.com/docs/system-information-and-utilities/device-mode/) for configuration
 
 ## Configuration
 
@@ -68,11 +72,24 @@ Multiple domains example:
 ## Installation
 
 ### 1. Set Script Permissions
+
+These commands assume the script has already been saved as `cloudflare-ddns` in `/system script`.
+
 ```routeros
-/system script set cloudflare-ddns policy=read,write,policy,test
+/system script set cloudflare-ddns policy=read,test
 ```
 
 ### 2. Create Scheduler
 ```routeros
-/system scheduler add name=cloudflare-ddns-scheduler interval=5m on-event=cloudflare-ddns
+/system scheduler add name=cloudflare-ddns-scheduler interval=5m on-event=cloudflare-ddns policy=read,test
 ```
+
+## Changes — 2026-10-29
+
+- Save the cached WAN IP only after all configured domains update successfully. If any domain fails, retry all configured domains on the next scheduled run while the WAN IP differs from the cached IP.
+- Leave the cached WAN IP unchanged in TestMode.
+- Update the MikroTik Device-mode documentation link to the new official manual.
+- Remove the redundant DNS Read requirement and explicitly set scheduler permissions in the installation example.
+- Permission references: [Cloudflare DNS API](https://developers.cloudflare.com/api/resources/dns/subresources/records/methods/list/), [RouterOS script permissions](https://manual.mikrotik.com/docs/developer-guides/scripting/#script-permissions). The listed RouterOS policies are the example configuration, not a verified minimum.
+- Reduce script and scheduler policies to `read,test` based on the code and [official policy definitions](https://manual.mikrotik.com/docs/cli-reference/user/group/). RouterOS runtime verification is pending.
+- Fix HTTP error logging: capture Fetch errors where supported and show `unavailable` when the RouterOS version does not expose the HTTP code. RouterOS runtime verification is pending.

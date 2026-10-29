@@ -78,12 +78,32 @@
 
         # Cloudflare DNS Update
         :if ($TestMode = false) do={
+            :local allDomainsSucceeded true
+
             # Convert CheckCertificate boolean to yes/no string
             :local certCheck
             :if ($CheckCertificate = true) do={
                 :set certCheck "yes"
             } else={
                 :set certCheck "no"
+            }
+
+            # Parse newer error handlers at runtime so older RouterOS can fall back
+            :local fetchRequest
+            :do {
+                :set fetchRequest [:parse ":onerror fetchError,fetchAttrs in={ :return [/tool fetch url=\$requestUrl http-method=\$requestMethod check-certificate=\$certificateCheck output=user as-value http-header-field=\$requestHeaders http-data=\$requestData] } do={ :local httpCode (\$fetchAttrs->\"code\"); :if ([:typeof \$httpCode] = \"nil\") do={ :set httpCode \"unavailable\" }; :return {\"status\"=\"failed\";\"code\"=\$httpCode;\"error\"=\$fetchError} }"]
+            } on-error={
+                :do {
+                    :set fetchRequest [:parse ":onerror fetchError in={ :return [/tool fetch url=\$requestUrl http-method=\$requestMethod check-certificate=\$certificateCheck output=user as-value http-header-field=\$requestHeaders http-data=\$requestData] } do={ :return {\"status\"=\"failed\";\"code\"=\"unavailable\";\"error\"=\$fetchError} }"]
+                } on-error={
+                    :set fetchRequest do={
+                        :do {
+                            :return [/tool fetch url=$requestUrl http-method=$requestMethod check-certificate=$certificateCheck output=user as-value http-header-field=$requestHeaders http-data=$requestData]
+                        } on-error={
+                            :return {"status"="failed";"code"="unavailable";"error"="Fetch failed; detailed errors are unavailable on this RouterOS version"}
+                        }
+                    }
+                }
             }
 
             :foreach fqdn,params in=$DomainConfigs do={
@@ -94,11 +114,12 @@
 
                     # DNS Record Lookup
                     :local queryUrl "https://api.cloudflare.com/client/v4/zones/$DnsZoneID/dns_records?name=$fqdn&type=A"
-                    :local queryResult [/tool fetch url=$queryUrl http-method=get check-certificate=$certCheck output=user as-value http-header-field="Authorization:Bearer $AuthToken"]
+                    :local queryResult [$fetchRequest requestUrl=$queryUrl requestMethod="get" certificateCheck=$certCheck requestHeaders="Authorization:Bearer $AuthToken" requestData=""]
 
                     :if ($queryResult->"status" = "finished") do={
                         :local responseData ($queryResult->"data")
-                        :local httpStatus ($queryResult->"http-status")
+                        :local httpStatus ($queryResult->"code")
+                        :if ([:typeof $httpStatus] = "nil") do={ :set httpStatus "unavailable" }
 
                         # Validate API response success
                         :local successPos [:find $responseData "\"success\":true"]
@@ -145,11 +166,12 @@
 
                             # DNS Record Update
                             :local updateUrl "https://api.cloudflare.com/client/v4/zones/$DnsZoneID/dns_records/$DnsRecordID"
-                            :local UpdateApiResult [/tool fetch url=$updateUrl http-method=put check-certificate=$certCheck output=user as-value http-header-field="Authorization:Bearer $AuthToken,Content-Type:application/json" http-data="{\"type\":\"A\",\"name\":\"$fqdn\",\"content\":\"$WanIP4New\",\"ttl\":60,\"proxied\":$proxiedValue}"]
+                            :local UpdateApiResult [$fetchRequest requestUrl=$updateUrl requestMethod="put" certificateCheck=$certCheck requestHeaders="Authorization:Bearer $AuthToken,Content-Type:application/json" requestData="{\"type\":\"A\",\"name\":\"$fqdn\",\"content\":\"$WanIP4New\",\"ttl\":60,\"proxied\":$proxiedValue}"]
 
                             :if ($UpdateApiResult->"status" = "finished") do={
                                 :local updateData ($UpdateApiResult->"data")
-                                :local updateHttpStatus ($UpdateApiResult->"http-status")
+                                :local updateHttpStatus ($UpdateApiResult->"code")
+                                :if ([:typeof $updateHttpStatus] = "nil") do={ :set updateHttpStatus "unavailable" }
 
                                 # Validate update API response success
                                 :local updateSuccessPos [:find $updateData "\"success\":true"]
@@ -166,7 +188,7 @@
                                     :error "Update API returned failure"
                                 }
                             } else={
-                                :log error "[DDNS] Record update failed: $fqdn - HTTP request error"
+                                :log error ("[DDNS] Record update failed: $fqdn - HTTP " . ($UpdateApiResult->"code") . " - " . ($UpdateApiResult->"error"))
                                 :error "Update HTTP request failed"
                             }
                         } else={
@@ -174,18 +196,22 @@
                             :error "DNS record not found"
                         }
                     } else={
-                        :log error "[DDNS] Record lookup failed: $fqdn - HTTP request error"
+                        :log error ("[DDNS] Record lookup failed: $fqdn - HTTP " . ($queryResult->"code") . " - " . ($queryResult->"error"))
                         :error "Lookup HTTP request failed"
                     }
                 } on-error={
+                    :set allDomainsSucceeded false
                     :log error "[DDNS] Record update failed: $fqdn - Skipping to next domain"
                 }
 
                 :delay 1s
             }
-        }
 
-        :set WanIP4Cur $WanIP4New
+            # Cache the IP only after every domain update succeeds
+            :if ($allDomainsSucceeded = true) do={
+                :set WanIP4Cur $WanIP4New
+            }
+        }
 
     } else={
         :log info "[DDNS] IP check completed: No change detected (current: $WanIP4New)"
