@@ -16,7 +16,11 @@ args = parser.parse_args()
 ROOT = Path(__file__).resolve().parents[1]
 A = '198.51.100.10'
 B = '198.51.100.20'
-state = {'mode': 'ok', 'test': False, 'proxy': False, 'requests': [], 'records': {'one.example.com': A, 'two.example.com': A}}
+POLICIES = ('read', 'write', 'policy', 'test')
+POLICY = ','.join(POLICIES)
+SCHEDULER = 'cloudflare-ddns-scheduler'
+INTERVAL = 10
+state = {'mode': 'ok', 'test': False, 'proxy': False, 'requests': [], 'request_times': [], 'records': {'one.example.com': A, 'two.example.com': A}}
 
 def source():
     s = (ROOT / 'cloudflare-ddns.rsc').read_text().replace(':local WanInterface "ether1"', ':local WanInterface "wan-test"')
@@ -46,6 +50,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, source(), 'text/plain')
         domain = parse_qs(urlparse(self.path).query)['name'][0]
         state['requests'].append(('GET', domain))
+        state['request_times'].append(time.monotonic())
         if state['mode'] == 'all-fail':
             return self.reply(403, {'success': False, 'errors': [{'code': 10000, 'message': 'Denied'}]})
         record = {'id': ('1' if domain.startswith('one.') else '2') * 32, 'name': domain, 'type': 'A', 'content': state['records'][domain]}
@@ -55,6 +60,7 @@ class Handler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         domain = body['name']
         state['requests'].append(('PUT', domain, body))
+        state['request_times'].append(time.monotonic())
         if state['mode'] == 'partial-fail' and domain.startswith('two.'):
             return self.reply(403, {'success': False, 'errors': [{'code': 10000, 'message': 'Denied'}]})
         if state['mode'] == 'api-fail' and domain.startswith('two.'):
@@ -85,23 +91,38 @@ try:
     def cmd(text, timeout=30):
         p.sendline(text)
         p.expect(prompt, timeout=timeout)
-        return p.before.replace('\r', '')
+        out = p.before.replace('\r', '')
+        assert not re.search(r'(?m)^(syntax error|expected end of command|bad command name)', out), out
+        return out
 
     def install(first=False):
         out = cmd(f'/tool fetch url="http://10.0.2.2:{server.server_port}/source.rsc" dst-path=refactor.rsc')
         assert 'finished' in out, out
-        action = 'add name=cloudflare-ddns policy=read,test' if first else 'set cloudflare-ddns'
+        action = f'add name=cloudflare-ddns policy={POLICY}' if first else 'set cloudflare-ddns'
         out = cmd('/system script ' + action + ' source=[/file get refactor.rsc contents]')
         assert 'syntax error' not in out and 'expected' not in out, out
 
+    def script_logs():
+        out = cmd(':foreach entry in=[/log find where topics~"script"] do={ '
+                  ':put ("LOG=" . [:tostr $entry] . "|" . [/log get $entry message]) }')
+        return dict(re.findall(r'^LOG=(\*\w+)\|([^\r\n]*)', out, re.M))
+
+    def new_logs(previous):
+        return '\n'.join(message for key, message in script_logs().items() if key not in previous)
+
     def execute():
+        previous = script_logs()
         state['requests'] = []
+        state['request_times'] = []
         out = cmd('/system script run cloudflare-ddns use-script-permissions')
         assert 'syntax error' not in out and 'expected end' not in out, out
-        return out
+        return new_logs(previous)
 
     def cache():
-        out = cmd(':global WanIP4Cur; :put ("CACHE=" . $WanIP4Cur)')
+        out = cmd(':local value ""; '
+                  ':foreach entry in=[/system script environment find where name="WanIP4Cur"] do={ '
+                  ':set value [/system script environment get $entry value] }; '
+                  ':put ("CACHE=" . $value)')
         found = re.findall('^CACHE=([^\\r\\n]*)', out, re.M)
         assert found, out
         return found[-1]
@@ -124,9 +145,49 @@ try:
 
     def passed(name):
         print('PASS:', name, flush=True)
+
+    def scalar(expression):
+        out = cmd(':put ("VALUE=" . (' + expression + '))')
+        found = re.findall(r'^VALUE=([^\r\n]*)', out, re.M)
+        assert found, out
+        return found[-1]
+
+    def stop_scheduler():
+        cmd(f'/system scheduler remove [find where name="{SCHEDULER}"]')
+        wait_for_idle()
+
+    def start_scheduler(policy=POLICY, script_policy=None, clear_cache=True):
+        stop_scheduler()
+        cmd(f'/system script set cloudflare-ddns policy={script_policy or policy}')
+        if clear_cache:
+            cmd('/system script environment remove [find where name="WanIP4Cur"]')
+            assert cache() == ''
+        state['requests'] = []
+        state['request_times'] = []
+        previous = script_logs()
+        started = time.monotonic()
+        cmd(f'/system scheduler add name={SCHEDULER} interval={INTERVAL}s '
+            f'on-event=cloudflare-ddns policy={policy}')
+        assert scheduled_count() == 0
+        return previous, started
+
+    def scheduled_count():
+        return int(scalar(f'[/system scheduler get [find where name="{SCHEDULER}"] run-count]'))
+
+    def wait_scheduled(after):
+        deadline = time.monotonic() + INTERVAL + 30
+        while time.monotonic() < deadline:
+            count = scheduled_count()
+            if count > after:
+                assert count == after + 1, f'Missed scheduled execution: {after} -> {count}'
+                wait_for_idle()
+                return
+            time.sleep(0.5)
+        raise AssertionError('Scheduled execution did not start within the timeout')
+
     resource = cmd('/system resource print')
     assert re.search('version:\\s+7\\.25\\b', resource), resource
-    print('RouterOS 7.25 CHR / read,test / local mock API', flush=True)
+    print(f'RouterOS 7.25 CHR / {POLICY} / local mock API', flush=True)
     cmd('/interface bridge add name=wan-test')
     cmd('/ip address add address=198.51.100.99/24 interface=wan-test disabled=yes')
     cmd('/ip address add address=' + A + '/24 interface=wan-test')
@@ -136,15 +197,14 @@ try:
     passed('native source parsing')
     execute()
     assert len(state['requests']) == 4 and cache() == A, state
-    passed('initial sync using read,test and disabled address exclusion')
+    passed('initial sync and disabled address exclusion')
     execute()
     assert not state['requests']
     passed('unchanged IP skips API')
     wan(B)
     state['mode'] = 'partial-fail'
-    execute()
+    logs = execute()
     assert state['records']['one.example.com'] == B and state['records']['two.example.com'] == A and (cache() == ''), state
-    logs = cmd('/log print detail without-paging where topics~"script"')
     assert 'HTTP 403' in logs, logs
     passed('partial failure, HTTP 403 logging, cache invalidation')
     wan(A)
@@ -173,19 +233,95 @@ try:
     passed('TestMode leaves cache unchanged; real run resumes with shared proxy option')
     wan(B)
     state['mode'] = 'api-fail'
-    execute()
+    logs = execute()
     assert cache() == ''
-    logs = cmd('/log print detail without-paging where topics~"script"')
     assert 'Denied' in logs, logs
     passed('API success=false is logged without marking sync complete')
     state['mode'] = 'ok'
     state['requests'] = []
+    previous = script_logs()
     cmd(':execute {/system script run cloudflare-ddns use-script-permissions}')
     cmd('/system script run cloudflare-ddns use-script-permissions')
     wait_for_idle()
-    logs = cmd('/log print detail without-paging where topics~"script"')
+    logs = new_logs(previous)
     assert 'Another instance is running' in logs and len(state['requests']) == 4, (logs, state)
     passed('overlapping runs skip the second instance')
+
+    # Scheduled execution uses the real updater and an accelerated interval.
+    state['test'] = False
+    state['proxy'] = False
+    install()
+    wan(A)
+    state['records'] = dict.fromkeys(state['records'], '1.1.1.1')
+    previous, started = start_scheduler()
+    wait_scheduled(0)
+    assert min(state['request_times']) - started >= INTERVAL - 1
+    assert len(state['requests']) == 4 and set(state['records'].values()) == {A}, state
+    assert cache() == A
+    wait_scheduled(1)
+    stop_scheduler()
+    logs = new_logs(previous)
+    assert len(state['requests']) == 4 and cache() == A, state
+    assert logs.count('Record updated:') == 2 and 'No IP change:' in logs, logs
+    passed('scheduler waits one interval, updates both records, retains cache, and skips unchanged IP')
+
+    # Equal script and scheduler policies isolate each missing permission.
+    for missing in POLICIES:
+        state['records'] = dict.fromkeys(state['records'], B)
+        policy = ','.join(name for name in POLICIES if name != missing)
+        previous, _ = start_scheduler(policy)
+        wait_scheduled(0)
+        assert cache() == '', missing
+        if missing in ('read', 'test'):
+            stop_scheduler()
+            logs = new_logs(previous)
+            assert not state['requests'] and set(state['records'].values()) == {B}, state
+            assert 'not enough permissions' in logs, logs
+            if missing == 'test':
+                assert '/tool/fetch' in logs, logs
+            passed(f'permission check: excluding {missing} blocks required operations')
+        else:
+            assert len(state['requests']) == 4 and set(state['records'].values()) == {A}, state
+            wait_scheduled(1)
+            stop_scheduler()
+            logs = new_logs(previous)
+            assert cache() == '' and len(state['requests']) == 8, state
+            assert logs.count('Record updated:') == 4 and 'No IP change:' not in logs, logs
+            passed(f'permission check: excluding {missing} loses cache and repeats updates')
+
+    state['records'] = dict.fromkeys(state['records'], B)
+    previous, _ = start_scheduler(script_policy='read,test')
+    wait_scheduled(0)
+    assert len(state['requests']) == 4 and cache() == A, state
+    wait_scheduled(1)
+    stop_scheduler()
+    logs = new_logs(previous)
+    assert len(state['requests']) == 4 and 'No IP change:' in logs, (logs, state)
+    passed('named on-event invocation inherits scheduler permissions with script policy read,test')
+
+    wan(B)
+    state['mode'] = 'partial-fail'
+    assert cache() == A
+    previous, _ = start_scheduler(clear_cache=False)
+    wait_scheduled(0)
+    logs = new_logs(previous)
+    assert len(state['requests']) == 4 and cache() == '', state
+    assert state['records']['one.example.com'] == B and state['records']['two.example.com'] == A, state
+    assert 'HTTP 403' in logs, logs
+    passed('scheduled partial failure logs HTTP 403 and leaves cache empty')
+    state['mode'] = 'ok'
+    state['requests'] = []
+    previous = script_logs()
+    wait_scheduled(1)
+    assert len(state['requests']) == 4 and set(state['records'].values()) == {B}, state
+    assert cache() == B
+    wait_scheduled(2)
+    stop_scheduler()
+    logs = new_logs(previous)
+    assert len(state['requests']) == 4 and cache() == B, state
+    assert logs.count('Record updated:') == 2 and 'No IP change:' in logs, logs
+    passed('next scheduled run retries without WAN change; successful cache skips later updates')
+
     print('ALL CHR TESTS PASSED (mock API; no Cloudflare account used)', flush=True)
 except Exception:
     print('TEST FAILED', flush=True)

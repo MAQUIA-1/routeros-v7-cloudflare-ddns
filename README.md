@@ -9,10 +9,10 @@ Monitors a specific network interface and automatically updates Cloudflare DNS A
 - Zone - DNS - Edit
 - Access to the configured zones and existing A records
 
-**MikroTik Script Permissions:**
+**MikroTik Execution Permissions:**
 
-- `read`, `test`
-- Set the scheduler policy to match (see Installation).
+- `read`, `write`, `policy`, `test`
+- The scheduler policy must include all permissions declared by the script.
 
 **Device-mode Policies:**
 
@@ -66,23 +66,29 @@ Multiple domains example:
 ```
 
 - **CloudflareProxy**: Cloudflare proxy (orange cloud) for DNS records
-- **CheckCertificate**: SSL certificate validation for API connections (requires valid CA certificates)
-- **TestMode**: Test mode (IP checks only, no DNS updates)
+- **CheckCertificate**: TLS certificate validation for API connections (requires valid CA certificates)
+- **TestMode**: IP checks only; DNS records and the cached IP remain unchanged
 
 ## Installation
 
 ### 1. Set Script Permissions
 
-These commands assume the script has already been saved as `cloudflare-ddns` in `/system script`.
+Save the script as `cloudflare-ddns` in `/system script` before configuring permissions.
 
 ```routeros
-/system script set cloudflare-ddns policy=read,test
+/system script set cloudflare-ddns policy=read,write,policy,test
 ```
 
 ### 2. Create Scheduler
 ```routeros
-/system scheduler add name=cloudflare-ddns-scheduler interval=5m on-event=cloudflare-ddns policy=read,test
+/system scheduler add name=cloudflare-ddns-scheduler interval=5m on-event=cloudflare-ddns policy=read,write,policy,test
 ```
+
+The first scheduled execution occurs after one interval (5 minutes in this configuration).
+
+## Tested Environment
+
+MikroTik RB5009UG+S+, RouterOS 7.25.
 
 ## Changes — 2026-10-29
 
@@ -91,4 +97,4 @@ These commands assume the script has already been saved as `cloudflare-ddns` in 
 - Added protection against overlapping update runs.
 - Excluded disabled and invalid interface addresses from WAN IP selection.
 - Improved failure messages with HTTP status codes and removed duplicate error logs.
-- Simplified permissions: Cloudflare DNS Edit covers both lookup and updates; script and scheduler permissions are now `read,test`.
+- Clarified required permissions: Cloudflare DNS Edit and RouterOS `read,write,policy,test`.
