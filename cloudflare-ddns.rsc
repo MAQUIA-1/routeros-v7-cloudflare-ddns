@@ -1,4 +1,4 @@
-# MikroTik RouterOS v7 - Cloudflare DDNS Updater
+# Cloudflare DDNS for MikroTik RouterOS v7
 # https://github.com/MAQUIA-1/routeros-v7-cloudflare-ddns
 
 # ===========================================================================
