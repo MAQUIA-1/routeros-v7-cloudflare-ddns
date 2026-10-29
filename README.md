@@ -86,12 +86,6 @@ These commands assume the script has already been saved as `cloudflare-ddns` in 
 
 ## Changes — 2026-10-29
 
-- Clear the completed IP cache before updating and save it only after all configured domains succeed. Retry after a failure or interruption, even if the WAN IP returns to its previous value.
-- Leave the cached WAN IP unchanged in TestMode.
-- Update the MikroTik Device-mode documentation link to the new official manual.
-- Remove the redundant DNS Read requirement and explicitly set scheduler permissions in the installation example.
-- Permission references: [Cloudflare DNS API](https://developers.cloudflare.com/api/resources/dns/subresources/records/methods/list/), [RouterOS script permissions](https://manual.mikrotik.com/docs/developer-guides/scripting/#script-permissions). The listed RouterOS policies are the example configuration, not a verified minimum.
-- Reduce script and scheduler policies to `read,test` based on the code and [official policy definitions](https://manual.mikrotik.com/docs/cli-reference/user/group/). RouterOS runtime verification is pending.
-- Fix HTTP error logging: capture Fetch errors where supported and show `unavailable` when the RouterOS version does not expose the HTTP code. RouterOS runtime verification is pending.
-- Ignore disabled or invalid interface addresses, and skip overlapping runs of the installed `cloudflare-ddns` script.
-- Check the numeric type of substring search results instead of applying `:len` to positions; keep the existing string-based JSON handling.
+- Rebuild the updater around API request, domain update, and main-flow functions; remove runtime syntax probing and duplicate error logs.
+- Preserve retries after partial failure or WAN reversion, TestMode behavior, valid-address filtering, and overlapping-run protection. Keep the previous implementation locally in `legacy/` (excluded from Git).
+- Verify execution with `read,test` permissions on RouterOS 7.25 CHR using a local mock API. See [execution checks](tests/README.md); live Cloudflare and TLS validation remain untested.
