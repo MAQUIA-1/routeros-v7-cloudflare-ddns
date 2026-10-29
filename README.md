@@ -92,9 +92,9 @@ MikroTik RB5009UG+S+, RouterOS 7.25.
 
 ## Changes — 2026-10-29
 
-- Fixed failed DNS updates not being retried while the WAN IP remains unchanged, including recovery when it returns to a previous address.
-- Fixed TestMode causing the next normal run to skip DNS updates.
-- Added protection against overlapping update runs.
-- Excluded disabled and invalid interface addresses from WAN IP selection.
-- Improved failure messages with HTTP status codes and removed duplicate error logs.
-- Clarified required permissions: Cloudflare DNS Edit and RouterOS `read,write,policy,test`.
+- Fixed skipped retries after DNS update failures when the WAN IP remains unchanged or returns to a previous address.
+- Fixed TestMode modifying the cached IP and suppressing subsequent DNS updates.
+- Added protection against concurrent script execution.
+- Excluded disabled and invalid IPv4 addresses from WAN IP selection.
+- Corrected HTTP status reporting and removed duplicate failure logs.
+- Removed the redundant Cloudflare DNS Read token requirement; DNS Edit covers both lookup and updates.
