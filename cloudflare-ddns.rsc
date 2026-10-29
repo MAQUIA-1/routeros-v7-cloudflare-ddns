@@ -30,14 +30,20 @@
 # Script Execution
 # ===========================================================================
 
+# Use the script name from the installation instructions
+:if ([/system script job print count-only where script="cloudflare-ddns"] > 1) do={
+    :log warning "[DDNS] Another instance is running: Skipping this run"
+    :error "DDNS script already running"
+}
+
 :global WanIP4Cur
 :local WanIP4New
 
 # --- WAN IP Lookup ---
 :do {
-    :local ipAddressList [/ip address find interface=$WanInterface]
+    :local ipAddressList [/ip address find where interface=$WanInterface disabled=no invalid=no]
     :if ([:len $ipAddressList] = 0) do={
-        :log error "[DDNS] IP lookup failed: No IP address found (interface: $WanInterface)"
+        :log error "[DDNS] IP lookup failed: No enabled, valid IP address found (interface: $WanInterface)"
         :error "IP lookup failed"
     }
     :local ipWithMask [/ip address get [:pick $ipAddressList 0] address]
@@ -78,6 +84,8 @@
 
         # Cloudflare DNS Update
         :if ($TestMode = false) do={
+            # A partial update invalidates the previous completed state, even if WAN reverts
+            :set WanIP4Cur ""
             :local allDomainsSucceeded true
 
             # Convert CheckCertificate boolean to yes/no string
@@ -123,10 +131,10 @@
 
                         # Validate API response success
                         :local successPos [:find $responseData "\"success\":true"]
-                        :if ([:len $successPos] = 0) do={
+                        :if ([:typeof $successPos] != "num") do={
                             :log error "[DDNS] Record lookup failed: $fqdn - API returned error (HTTP $httpStatus)"
                             :local errorsPos [:find $responseData "\"errors\":["]
-                            :if ([:len $errorsPos] > 0) do={
+                            :if ([:typeof $errorsPos] = "num") do={
                                 :local errorsEnd [:find $responseData "]" $errorsPos]
                                 :local errorsContent [:pick $responseData $errorsPos ($errorsEnd + 1)]
                                 :log error "[DDNS] Record lookup error details: $errorsContent"
@@ -136,7 +144,7 @@
 
                         # Find result array and extract first record ID
                         :local resultPos [:find $responseData "\"result\":["]
-                        :if ([:len $resultPos] = 0) do={
+                        :if ([:typeof $resultPos] != "num") do={
                             :log error "[DDNS] Record lookup failed: $fqdn - Invalid API response structure (missing result array)"
                             :error "Invalid API response structure"
                         }
@@ -145,7 +153,7 @@
                         :local searchStart ($resultPos + 10)
                         :local idPos [:find $responseData "\"id\":\"" $searchStart]
 
-                        :if ([:len $idPos] > 0) do={
+                        :if ([:typeof $idPos] = "num") do={
                             :local idStart ($idPos + 6)
                             :local idEnd [:find $responseData "\"" $idStart]
                             :local DnsRecordID [:pick $responseData $idStart $idEnd]
@@ -175,12 +183,12 @@
 
                                 # Validate update API response success
                                 :local updateSuccessPos [:find $updateData "\"success\":true"]
-                                :if ([:len $updateSuccessPos] > 0) do={
+                                :if ([:typeof $updateSuccessPos] = "num") do={
                                     :log warning "[DDNS] Record update succeeded: $fqdn -> $WanIP4New"
                                 } else={
                                     :log error "[DDNS] Record update failed: $fqdn - API returned error (HTTP $updateHttpStatus)"
                                     :local updateErrorsPos [:find $updateData "\"errors\":["]
-                                    :if ([:len $updateErrorsPos] > 0) do={
+                                    :if ([:typeof $updateErrorsPos] = "num") do={
                                         :local updateErrorsEnd [:find $updateData "]" $updateErrorsPos]
                                         :local updateErrorsContent [:pick $updateData $updateErrorsPos ($updateErrorsEnd + 1)]
                                         :log error "[DDNS] Record update error details: $updateErrorsContent"

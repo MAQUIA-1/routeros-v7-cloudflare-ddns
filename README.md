@@ -86,10 +86,12 @@ These commands assume the script has already been saved as `cloudflare-ddns` in 
 
 ## Changes — 2026-10-29
 
-- Save the cached WAN IP only after all configured domains update successfully. If any domain fails, retry all configured domains on the next scheduled run while the WAN IP differs from the cached IP.
+- Clear the completed IP cache before updating and save it only after all configured domains succeed. Retry after a failure or interruption, even if the WAN IP returns to its previous value.
 - Leave the cached WAN IP unchanged in TestMode.
 - Update the MikroTik Device-mode documentation link to the new official manual.
 - Remove the redundant DNS Read requirement and explicitly set scheduler permissions in the installation example.
 - Permission references: [Cloudflare DNS API](https://developers.cloudflare.com/api/resources/dns/subresources/records/methods/list/), [RouterOS script permissions](https://manual.mikrotik.com/docs/developer-guides/scripting/#script-permissions). The listed RouterOS policies are the example configuration, not a verified minimum.
 - Reduce script and scheduler policies to `read,test` based on the code and [official policy definitions](https://manual.mikrotik.com/docs/cli-reference/user/group/). RouterOS runtime verification is pending.
 - Fix HTTP error logging: capture Fetch errors where supported and show `unavailable` when the RouterOS version does not expose the HTTP code. RouterOS runtime verification is pending.
+- Ignore disabled or invalid interface addresses, and skip overlapping runs of the installed `cloudflare-ddns` script.
+- Check the numeric type of substring search results instead of applying `:len` to positions; keep the existing string-based JSON handling.
