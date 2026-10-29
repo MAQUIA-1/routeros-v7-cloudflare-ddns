@@ -1,20 +1,27 @@
-# MikroTik RouterOS - Cloudflare DDNS
-# Uses structured Fetch errors (:onerror error,attributes).
-# Previous implementation: legacy/cloudflare-ddns.rsc
+# MikroTik RouterOS v7 - Cloudflare DDNS Updater
+# https://github.com/MAQUIA-1/routeros-v7-cloudflare-ddns
 
-# --- Configuration ---
+# ===========================================================================
+# Configuration
+# ===========================================================================
+# WAN interface selection
 :local WanInterface "ether1"
+# DNS records and Cloudflare zone credentials
 :local DomainConfigs {
     "example.domain.com"={
         "DnsZoneID"="your_cloudflare_zone_id";
         "AuthToken"="your_cloudflare_api_token";
     };
 }
+# Cloudflare proxy status
 :local CloudflareProxy false
+# TLS certificate verification
 :local CheckCertificate false
+# Test mode: disable DNS updates and cache writes
 :local TestMode false
 
-# --- API request: return a successful response body or raise one error ---
+# ===========================================================================
+# Cloudflare API request handling
 :local callApi do={
     :local fetched
     :onerror fetchError,fetchAttrs in={
@@ -49,7 +56,7 @@
     :error ("$operation failed: HTTP $httpCode - $details")
 }
 
-# --- One domain: look up its record, then update it ---
+# DNS record synchronization
 :local updateDomain do={
     :local api $apiFunction
     :local zoneID ($domainConfig->"DnsZoneID")
@@ -85,11 +92,11 @@
         certificateCheck=$certificateCheck requestHeaders=$headers requestData=$payload]
 }
 
-# --- Main: check IP, synchronize domains, save completed state ---
+# Main execution
 :local run do={
     :global WanIP4Cur
 
-    # Match the registered script name used in README.
+    # Concurrent execution control
     :if ([/system script job print count-only where script="cloudflare-ddns"] > 1) do={
         :log warning "[DDNS] Another instance is running: Skipping this run"
         :return false
@@ -125,7 +132,7 @@
     :local update $updateFunction
     :local allSucceeded true
     :log info "[DDNS] Synchronizing configured A records to $wanIP"
-    # Invalidate before the first request: failure or interruption must trigger a retry.
+    # Invalidate the cache to allow retries after incomplete synchronization.
     :set WanIP4Cur ""
     :foreach fqdn,config in=$domains do={
         :onerror domainError in={
