@@ -1,27 +1,27 @@
 # MikroTik RouterOS v7용 Cloudflare DDNS
 
-지정한 네트워크 인터페이스의 IP 주소가 바뀌면 Cloudflare DNS A 레코드를 자동으로 갱신합니다.
+네트워크 인터페이스의 IPv4 주소를 확인하고, 주소가 변경되면 설정된 Cloudflare DNS A 레코드를 갱신합니다.
 
 ## 요구사항
 
 **Cloudflare API 토큰:**
 
 - Zone - DNS - Edit 권한
-- 설정한 Zone에 접근할 수 있어야 하며, 갱신할 A 레코드가 이미 있어야 합니다.
+- 설정된 Zone에 접근할 수 있어야 하며, 각 도메인의 A 레코드가 이미 존재해야 합니다.
 
 **MikroTik 실행 권한:**
 
 - `read`, `write`, `policy`, `test`
 - 스케줄러 권한은 스크립트에 지정된 모든 권한을 포함해야 합니다.
 
-**Device-mode 정책:**
+**Device-mode 설정:**
 
-- 예약 실행을 위해 `fetch`와 `scheduler`가 허용되어 있어야 합니다.
-- [MikroTik Device-mode 공식 문서](https://manual.mikrotik.com/docs/system-information-and-utilities/device-mode/)
+- 예약 실행을 위해 `fetch`와 `scheduler`가 활성화되어 있어야 합니다.
+- 설정 방법은 [MikroTik device-mode 공식 문서](https://manual.mikrotik.com/docs/system-information-and-utilities/device-mode/)를 참고하세요.
 
 ## 설정
 
-`cloudflare-ddns.rsc`에서 다음 값을 수정합니다.
+`cloudflare-ddns.rsc`에서 다음 항목을 설정합니다.
 
 ### WAN 인터페이스
 
@@ -29,7 +29,7 @@
 :local WanInterface "ether1"
 ```
 
-실제로 사용하는 WAN 인터페이스 이름을 입력합니다.
+`WanInterface`에 주소를 확인할 인터페이스 이름을 지정합니다.
 
 ### 도메인 및 인증 정보
 
@@ -42,7 +42,7 @@
 }
 ```
 
-다음 항목을 실제 값으로 바꿉니다.
+다음 예시 값을 실제 설정값으로 바꿉니다.
 
 - `example.domain.com`: 갱신할 도메인 이름
 - `your_cloudflare_zone_id`: Cloudflare Zone ID
@@ -71,9 +71,9 @@
 :local TestMode false
 ```
 
-- **CloudflareProxy**: DNS 레코드의 Cloudflare 프록시 사용 여부.
-- **CheckCertificate**: API 연결 시 TLS 인증서 검증 여부. 유효한 CA 인증서가 필요합니다.
-- **TestMode**: IP 확인만 수행하며 DNS와 IP 캐시를 변경하지 않습니다.
+- **CloudflareProxy**: DNS 레코드의 Cloudflare 프록시(주황색 구름) 사용 여부를 설정합니다.
+- **CheckCertificate**: API 요청 시 TLS 인증서 검증을 활성화합니다. 유효한 CA 인증서가 필요합니다.
+- **TestMode**: DNS 레코드와 IP 캐시를 변경하지 않고 인터페이스의 IP 주소만 확인합니다.
 
 ## 설치
 
@@ -91,11 +91,11 @@
 /system scheduler add name=cloudflare-ddns-scheduler interval=5m on-event=cloudflare-ddns policy=read,write,policy,test
 ```
 
-첫 예약 실행은 스케줄러 생성 후 설정된 주기만큼 경과한 시점에 수행됩니다. 위 설정에서는 5분 후입니다.
+스크립트의 첫 예약 실행은 설정된 주기가 경과한 후 수행됩니다. 위 예시에서는 5분 후입니다.
 
 ## 검증 환경
 
-MikroTik RB5009UG+S+, RouterOS 7.25.
+RouterOS 7.25를 실행하는 MikroTik RB5009UG+S+.
 
 ## 변경사항 — 2026-10-29
 
